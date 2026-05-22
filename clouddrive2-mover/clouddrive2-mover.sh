@@ -4,7 +4,7 @@ shopt -s nullglob dotglob
 
 SRC_DIR="${SRC_DIR:-/opt/media/CloudDrive}"
 DST_DIR="${DST_DIR:-/opt/media/115完成}"
-STAGE_DIR="${STAGE_DIR:-$DST_DIR/.staging}"
+STAGE_DIR="${STAGE_DIR:-/opt/media/115mvtmp/.staging}"
 LOG_DIR="${LOG_DIR:-/var/log/clouddrive2-mover}"
 LOCK_FILE="${LOCK_FILE:-/run/clouddrive2-mover.lock}"
 
@@ -101,10 +101,14 @@ on_exit() {
     local code=$?
     if [[ $code -ne 0 ]]; then
         err "脚本异常退出，退出码: $code"
-        [[ "$SHOULD_SUMMARIZE" -eq 1 ]] && print_summary "失败"
+        if [[ "$SHOULD_SUMMARIZE" -eq 1 ]]; then
+            print_summary "失败"
+        fi
     else
         log "脚本正常结束"
-        [[ "$SHOULD_SUMMARIZE" -eq 1 ]] && print_summary "完成"
+        if [[ "$SHOULD_SUMMARIZE" -eq 1 ]]; then
+            print_summary "完成"
+        fi
     fi
 }
 trap on_exit EXIT

@@ -42,7 +42,7 @@ curl -fsSL https://raw.githubusercontent.com/great99mm/myscripts/main/install-cl
 ```bash
 SRC_DIR=/opt/media/CloudDrive \
 DST_DIR=/opt/media/115完成 \
-STAGE_DIR=/opt/media/115完成/.staging \
+STAGE_DIR=/opt/media/115mvtmp/.staging \
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/great99mm/myscripts/main/install-clouddrive2-mover.sh)"
 ```
 
@@ -65,7 +65,7 @@ sudo bash install.sh
 ```bash
 sudo SRC_DIR=/opt/media/CloudDrive \
      DST_DIR=/opt/media/115完成 \
-     STAGE_DIR=/opt/media/115完成/.staging \
+     STAGE_DIR=/opt/media/115mvtmp/.staging \
      bash install.sh
 ```
 

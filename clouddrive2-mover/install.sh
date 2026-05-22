@@ -153,7 +153,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 SRC_DIR="${SRC_DIR:-/opt/media/CloudDrive}"
 DST_DIR="${DST_DIR:-/opt/media/115完成}"
-STAGE_DIR="${STAGE_DIR:-$DST_DIR/.staging}"
+STAGE_DIR="${STAGE_DIR:-/opt/media/115mvtmp/.staging}"
 LOG_DIR="${LOG_DIR:-/var/log/clouddrive2-mover}"
 LOCK_FILE="${LOCK_FILE:-/run/clouddrive2-mover.lock}"
 RETRY_TIMES="${RETRY_TIMES:-3}"
@@ -224,7 +224,7 @@ prompt_yes_no() {
 interactive_config() {
     prompt_input SRC_DIR "请输入 CloudDrive2 挂载源目录" "$SRC_DIR"
     prompt_input DST_DIR "请输入本地目标目录" "$DST_DIR"
-    prompt_input STAGE_DIR "请输入 staging 临时目录" "$DST_DIR/.staging"
+    prompt_input STAGE_DIR "请输入 staging 临时目录" "$STAGE_DIR"
     prompt_input LOG_DIR "请输入日志目录" "$LOG_DIR"
     prompt_yes_no CHECK_MOUNTPOINT "是否开启挂载点检查？(y/n)" "$CHECK_MOUNTPOINT"
     prompt_yes_no DRY_RUN "首次运行是否启用 dry-run？(y/n)" "$DRY_RUN"
@@ -256,23 +256,27 @@ install -m 755 "$SCRIPT_DIR/uninstall.sh" "$PREFIX/clouddrive2-mover-uninstall.s
 install -m 644 "$SCRIPT_DIR/clouddrive2-mover.service" "$SYSTEMD_DIR/clouddrive2-mover.service"
 install -m 644 "$SCRIPT_DIR/clouddrive2-mover.timer" "$SYSTEMD_DIR/clouddrive2-mover.timer"
 
-cat > "$ENV_DIR/clouddrive2-mover" <<EOF
-SRC_DIR=$SRC_DIR
-DST_DIR=$DST_DIR
-STAGE_DIR=$STAGE_DIR
-LOG_DIR=$LOG_DIR
-LOCK_FILE=$LOCK_FILE
-RETRY_TIMES=$RETRY_TIMES
-RETRY_DELAY=$RETRY_DELAY
-STABLE_CHECKS=$STABLE_CHECKS
-STABLE_INTERVAL=$STABLE_INTERVAL
-OVERWRITE=$OVERWRITE
-CLEAN_EMPTY_DIRS=$CLEAN_EMPTY_DIRS
-CHECK_MOUNTPOINT=$CHECK_MOUNTPOINT
-DRY_RUN=$DRY_RUN
-TG_BOT_TOKEN=$TG_BOT_TOKEN
-TG_CHAT_ID=$TG_CHAT_ID
-EOF
+write_env() {
+    {
+        printf 'SRC_DIR=%q\n' "$SRC_DIR"
+        printf 'DST_DIR=%q\n' "$DST_DIR"
+        printf 'STAGE_DIR=%q\n' "$STAGE_DIR"
+        printf 'LOG_DIR=%q\n' "$LOG_DIR"
+        printf 'LOCK_FILE=%q\n' "$LOCK_FILE"
+        printf 'RETRY_TIMES=%q\n' "$RETRY_TIMES"
+        printf 'RETRY_DELAY=%q\n' "$RETRY_DELAY"
+        printf 'STABLE_CHECKS=%q\n' "$STABLE_CHECKS"
+        printf 'STABLE_INTERVAL=%q\n' "$STABLE_INTERVAL"
+        printf 'OVERWRITE=%q\n' "$OVERWRITE"
+        printf 'CLEAN_EMPTY_DIRS=%q\n' "$CLEAN_EMPTY_DIRS"
+        printf 'CHECK_MOUNTPOINT=%q\n' "$CHECK_MOUNTPOINT"
+        printf 'DRY_RUN=%q\n' "$DRY_RUN"
+        printf 'TG_BOT_TOKEN=%q\n' "$TG_BOT_TOKEN"
+        printf 'TG_CHAT_ID=%q\n' "$TG_CHAT_ID"
+    } > "$ENV_DIR/clouddrive2-mover"
+}
+
+write_env
 
 systemctl daemon-reload
 
