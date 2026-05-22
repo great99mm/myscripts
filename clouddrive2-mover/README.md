@@ -101,6 +101,7 @@ sudo DRY_RUN=1 /usr/local/bin/clouddrive2-mover.sh --dry-run
 - `TG_CHAT_ID`
 
 配置后每次任务结束会发送摘要通知。
+安装完成后，如果这两个值都不为空，会立即发送一条 Telegram 测试消息。
 
 ## 配置文件
 

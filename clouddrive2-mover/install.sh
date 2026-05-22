@@ -125,6 +125,22 @@ self_check() {
     log "自检完成"
 }
 
+test_telegram() {
+    [[ -n "$TG_BOT_TOKEN" && -n "$TG_CHAT_ID" ]] || return 0
+
+    log "发送 Telegram 测试消息"
+    if curl -fsS -X POST \
+        "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+        --data-urlencode "chat_id=${TG_CHAT_ID}" \
+        --data-urlencode "text=CloudDrive2 Mover 安装完成，Telegram 通知测试成功。" \
+        >/dev/null; then
+        log "Telegram 测试消息发送成功"
+    else
+        err "Telegram 测试消息发送失败，请检查 TG_BOT_TOKEN 和 TG_CHAT_ID"
+        err "配置文件已写入，可稍后修改: $ENV_DIR/clouddrive2-mover"
+    fi
+}
+
 usage() {
     cat <<'EOF'
 用法:
@@ -285,6 +301,7 @@ if [[ "$ENABLE_NOW" == "1" ]]; then
 fi
 
 self_check
+test_telegram
 
 cat <<EOF
 安装完成。
