@@ -28,14 +28,25 @@
 curl -fsSL https://raw.githubusercontent.com/great99mm/myscripts/main/install-clouddrive2-mover.sh | bash
 ```
 
+这个安装器会先做几件事：
+
+- 检查当前系统是否使用 `systemd`
+- 检查 `SRC_DIR` 是否存在
+- 自动安装缺少的基础依赖（`curl`、`tar`、`sudo`）
+
 自定义目录：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/great99mm/myscripts/main/install-clouddrive2-mover.sh | \
 SRC_DIR=/opt/media/CloudDrive \
 DST_DIR=/opt/media/115完成 \
 STAGE_DIR=/opt/media/115完成/.staging \
-bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/great99mm/myscripts/main/install-clouddrive2-mover.sh)"
+```
+
+如果你的挂载目录不是标准 mountpoint，可以关闭挂载点检查：
+
+```bash
+CHECK_MOUNTPOINT=0 bash -c "$(curl -fsSL https://raw.githubusercontent.com/great99mm/myscripts/main/install-clouddrive2-mover.sh)"
 ```
 
 ### git clone

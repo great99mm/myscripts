@@ -14,6 +14,12 @@
 curl -fsSL https://raw.githubusercontent.com/great99mm/myscripts/main/install-clouddrive2-mover.sh | bash
 ```
 
+安装器会自动：
+
+- 检查是否为 systemd 系统
+- 检查 CloudDrive2 挂载源目录是否存在
+- 自动安装缺少的基础依赖（如 `curl` / `tar` / `sudo`）
+
 项目说明见：
 
 - `clouddrive2-mover/README.md`

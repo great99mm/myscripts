@@ -6,6 +6,95 @@ SYSTEMD_DIR="/etc/systemd/system"
 ENV_DIR="/etc/default"
 APP_NAME="clouddrive2-mover"
 
+log() {
+    printf '[%s] %s\n' "$(date '+%F %T')" "$*"
+}
+
+err() {
+    printf '[%s] ERROR: %s\n' "$(date '+%F %T')" "$*" >&2
+}
+
+require_cmd() {
+    command -v "$1" >/dev/null 2>&1 || {
+        err "缺少命令: $1"
+        exit 1
+    }
+}
+
+detect_pkg_manager() {
+    if command -v apt-get >/dev/null 2>&1; then
+        echo apt
+    elif command -v dnf >/dev/null 2>&1; then
+        echo dnf
+    elif command -v yum >/dev/null 2>&1; then
+        echo yum
+    elif command -v pacman >/dev/null 2>&1; then
+        echo pacman
+    else
+        echo unknown
+    fi
+}
+
+install_packages() {
+    local manager="$1"
+    shift
+    local packages=("$@")
+
+    case "$manager" in
+        apt)
+            apt-get update
+            apt-get install -y "${packages[@]}"
+            ;;
+        dnf)
+            dnf install -y "${packages[@]}"
+            ;;
+        yum)
+            yum install -y "${packages[@]}"
+            ;;
+        pacman)
+            pacman -Sy --noconfirm "${packages[@]}"
+            ;;
+        *)
+            err "不支持自动安装依赖，请手动安装: ${packages[*]}"
+            exit 1
+            ;;
+    esac
+}
+
+ensure_cmd() {
+    local cmd="$1"
+    local package="$2"
+    if command -v "$cmd" >/dev/null 2>&1; then
+        return 0
+    fi
+
+    local manager
+    manager="$(detect_pkg_manager)"
+    log "缺少 $cmd，尝试自动安装包: $package"
+    install_packages "$manager" "$package"
+
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        err "安装后仍然缺少命令: $cmd"
+        exit 1
+    fi
+}
+
+require_systemd() {
+    require_cmd systemctl
+    if [[ ! -d /run/systemd/system ]]; then
+        err "当前系统不是 systemd 环境，不能安装 timer 服务"
+        exit 1
+    fi
+}
+
+check_src_dir() {
+    if [[ ! -e "$SRC_DIR" ]]; then
+        err "源目录不存在: $SRC_DIR"
+        err "请先确认 CloudDrive2 已挂载，或者通过 SRC_DIR 指定正确路径"
+        exit 1
+    fi
+}
+
 usage() {
     cat <<'EOF'
 用法:
@@ -26,7 +115,7 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
 fi
 
 if [[ $EUID -ne 0 ]]; then
-    echo "请用 root 执行安装脚本。"
+    err "请用 root 执行安装脚本。"
     exit 1
 fi
 
@@ -45,6 +134,21 @@ OVERWRITE="${OVERWRITE:-0}"
 CLEAN_EMPTY_DIRS="${CLEAN_EMPTY_DIRS:-1}"
 CHECK_MOUNTPOINT="${CHECK_MOUNTPOINT:-1}"
 ENABLE_NOW="${ENABLE_NOW:-1}"
+
+ensure_cmd install coreutils
+ensure_cmd rsync rsync
+ensure_cmd find findutils
+ensure_cmd stat coreutils
+ensure_cmd flock util-linux
+if [[ "$CHECK_MOUNTPOINT" == "1" ]]; then
+    ensure_cmd mountpoint util-linux
+fi
+require_systemd
+check_src_dir
+
+log "安装 ${APP_NAME}"
+log "源目录: $SRC_DIR"
+log "目标目录: $DST_DIR"
 
 install -d -m 755 "$PREFIX" "$SYSTEMD_DIR" "$ENV_DIR" "$LOG_DIR" "$STAGE_DIR" "$DST_DIR"
 install -m 755 "$SCRIPT_DIR/clouddrive2-mover.sh" "$PREFIX/clouddrive2-mover.sh"
@@ -85,4 +189,8 @@ cat <<EOF
   systemctl status clouddrive2-mover.timer
   systemctl start clouddrive2-mover.service
   journalctl -u clouddrive2-mover.service -f
+
+如需修改配置:
+  编辑 $ENV_DIR/clouddrive2-mover
+  然后执行 systemctl restart clouddrive2-mover.timer
 EOF
