@@ -20,6 +20,26 @@
 
 ## 一键安装
 
+### curl | bash
+
+默认安装：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/great99mm/myscripts/main/install-clouddrive2-mover.sh | bash
+```
+
+自定义目录：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/great99mm/myscripts/main/install-clouddrive2-mover.sh | \
+SRC_DIR=/opt/media/CloudDrive \
+DST_DIR=/opt/media/115完成 \
+STAGE_DIR=/opt/media/115完成/.staging \
+bash
+```
+
+### git clone
+
 ```bash
 git clone <你的仓库地址>
 cd clouddrive2-mover
