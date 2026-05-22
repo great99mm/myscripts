@@ -164,9 +164,79 @@ OVERWRITE="${OVERWRITE:-0}"
 CLEAN_EMPTY_DIRS="${CLEAN_EMPTY_DIRS:-1}"
 CHECK_MOUNTPOINT="${CHECK_MOUNTPOINT:-1}"
 ENABLE_NOW="${ENABLE_NOW:-1}"
+DRY_RUN="${DRY_RUN:-0}"
+TG_BOT_TOKEN="${TG_BOT_TOKEN:-}"
+TG_CHAT_ID="${TG_CHAT_ID:-}"
 
+prompt_input() {
+    local var_name="$1"
+    local prompt_text="$2"
+    local default_value="$3"
+    local secret="${4:-0}"
+    local input=""
+
+    if [[ -n "${!var_name:-}" ]]; then
+        return 0
+    fi
+
+    if [[ ! -r /dev/tty ]]; then
+        printf -v "$var_name" '%s' "$default_value"
+        return 0
+    fi
+
+    if [[ "$secret" == "1" ]]; then
+        read -r -s -p "$prompt_text: " input </dev/tty
+        printf '\n' >/dev/tty
+    else
+        read -r -p "$prompt_text [$default_value]: " input </dev/tty
+    fi
+
+    if [[ "$secret" != "1" ]]; then
+        input="${input:-$default_value}"
+    fi
+    printf -v "$var_name" '%s' "$input"
+}
+
+prompt_yes_no() {
+    local var_name="$1"
+    local prompt_text="$2"
+    local default_value="$3"
+    local input=""
+
+    if [[ -n "${!var_name:-}" ]]; then
+        return 0
+    fi
+
+    if [[ ! -r /dev/tty ]]; then
+        printf -v "$var_name" '%s' "$default_value"
+        return 0
+    fi
+
+    read -r -p "$prompt_text [$default_value]: " input </dev/tty
+    input="${input:-$default_value}"
+    case "$input" in
+        y|Y|yes|YES|1) printf -v "$var_name" '1' ;;
+        n|N|no|NO|0) printf -v "$var_name" '0' ;;
+        *) printf -v "$var_name" '%s' "$default_value" ;;
+    esac
+}
+
+interactive_config() {
+    prompt_input SRC_DIR "请输入 CloudDrive2 挂载源目录" "$SRC_DIR"
+    prompt_input DST_DIR "请输入本地目标目录" "$DST_DIR"
+    prompt_input STAGE_DIR "请输入 staging 临时目录" "$DST_DIR/.staging"
+    prompt_input LOG_DIR "请输入日志目录" "$LOG_DIR"
+    prompt_yes_no CHECK_MOUNTPOINT "是否开启挂载点检查？(y/n)" "$CHECK_MOUNTPOINT"
+    prompt_yes_no DRY_RUN "首次运行是否启用 dry-run？(y/n)" "$DRY_RUN"
+    prompt_input TG_BOT_TOKEN "请输入 Telegram Bot Token，可留空" "$TG_BOT_TOKEN" 1
+    prompt_input TG_CHAT_ID "请输入 Telegram Chat ID，可留空" "$TG_CHAT_ID"
+    prompt_yes_no ENABLE_NOW "安装后是否立即启用定时器？(y/n)" "$ENABLE_NOW"
+}
+
+interactive_config
 ensure_cmd install coreutils
 ensure_cmd rsync rsync
+ensure_cmd curl curl
 ensure_cmd find findutils
 ensure_cmd stat coreutils
 ensure_cmd flock util-linux
@@ -199,6 +269,9 @@ STABLE_INTERVAL=$STABLE_INTERVAL
 OVERWRITE=$OVERWRITE
 CLEAN_EMPTY_DIRS=$CLEAN_EMPTY_DIRS
 CHECK_MOUNTPOINT=$CHECK_MOUNTPOINT
+DRY_RUN=$DRY_RUN
+TG_BOT_TOKEN=$TG_BOT_TOKEN
+TG_CHAT_ID=$TG_CHAT_ID
 EOF
 
 systemctl daemon-reload

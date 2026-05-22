@@ -15,11 +15,25 @@ STABLE_INTERVAL="${STABLE_INTERVAL:-5}"
 OVERWRITE="${OVERWRITE:-0}"
 CLEAN_EMPTY_DIRS="${CLEAN_EMPTY_DIRS:-1}"
 CHECK_MOUNTPOINT="${CHECK_MOUNTPOINT:-1}"
+DRY_RUN="${DRY_RUN:-0}"
+TG_BOT_TOKEN="${TG_BOT_TOKEN:-}"
+TG_CHAT_ID="${TG_CHAT_ID:-}"
+
+TOTAL_ITEMS=0
+COPIED_FILES=0
+COPIED_DIRS=0
+SKIPPED_ITEMS=0
+FAILED_ITEMS=0
+DRYRUN_ITEMS=0
+SUMMARY_SENT=0
+RUN_MODE="run"
+SHOULD_SUMMARIZE=1
 
 usage() {
     cat <<'EOF'
 用法:
   clouddrive2-mover.sh
+  clouddrive2-mover.sh --dry-run
   clouddrive2-mover.sh --self-check
   clouddrive2-mover.sh -h | --help
 EOF
@@ -46,6 +60,36 @@ err() {
     log "ERROR: $*"
 }
 
+send_telegram() {
+    [[ -n "$TG_BOT_TOKEN" && -n "$TG_CHAT_ID" ]] || return 0
+
+    curl -fsS -X POST \
+        "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+        --data-urlencode "chat_id=${TG_CHAT_ID}" \
+        --data-urlencode "text=$1" \
+        >/dev/null 2>&1 || true
+}
+
+print_summary() {
+    local status_text="$1"
+    log "摘要: mode=${RUN_MODE}, total=${TOTAL_ITEMS}, files=${COPIED_FILES}, dirs=${COPIED_DIRS}, skipped=${SKIPPED_ITEMS}, failed=${FAILED_ITEMS}, dryrun=${DRYRUN_ITEMS}"
+
+    if [[ "$SUMMARY_SENT" -eq 0 ]]; then
+        send_telegram "CloudDrive2 Mover ${status_text}
+模式: ${RUN_MODE}
+源目录: ${SRC_DIR}
+目标目录: ${DST_DIR}
+总项目: ${TOTAL_ITEMS}
+完成文件: ${COPIED_FILES}
+完成目录: ${COPIED_DIRS}
+跳过: ${SKIPPED_ITEMS}
+失败: ${FAILED_ITEMS}
+Dry Run 项目: ${DRYRUN_ITEMS}
+日志: ${LOG_FILE}"
+        SUMMARY_SENT=1
+    fi
+}
+
 require_cmd() {
     command -v "$1" >/dev/null 2>&1 || {
         err "缺少命令: $1"
@@ -57,8 +101,10 @@ on_exit() {
     local code=$?
     if [[ $code -ne 0 ]]; then
         err "脚本异常退出，退出码: $code"
+        [[ "$SHOULD_SUMMARIZE" -eq 1 ]] && print_summary "失败"
     else
         log "脚本正常结束"
+        [[ "$SHOULD_SUMMARIZE" -eq 1 ]] && print_summary "完成"
     fi
 }
 trap on_exit EXIT
@@ -135,13 +181,21 @@ copy_file() {
     name="$(basename -- "$src")"
     dst="$DST_DIR/$name"
     tmp="$STAGE_DIR/${name}.part.$$"
+    ((TOTAL_ITEMS+=1))
 
     if [[ -e "$dst" && "$OVERWRITE" -eq 0 ]]; then
         warn "目标已存在，跳过文件: $name"
+        ((SKIPPED_ITEMS+=1))
         return 0
     fi
 
     wait_file_stable "$src" || return 0
+
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+        log "[DRY-RUN] 将复制文件: $src -> $dst"
+        ((DRYRUN_ITEMS+=1))
+        return 0
+    fi
 
     src_size_before="$(get_size "$src" 2>/dev/null || echo -1)"
     log "开始复制文件: $name"
@@ -172,14 +226,17 @@ copy_file() {
         0)
             retry rm -f -- "$src"
             log "完成文件: $name"
+            ((COPIED_FILES+=1))
             ;;
         2)
             rm -f -- "$tmp" 2>/dev/null || true
             warn "发布跳过，保留源文件: $name"
+            ((SKIPPED_ITEMS+=1))
             ;;
         *)
             err "发布失败: $name"
             rm -f -- "$tmp" 2>/dev/null || true
+            ((FAILED_ITEMS+=1))
             return 1
             ;;
     esac
@@ -192,9 +249,17 @@ copy_dir() {
     name="$(basename -- "$src")"
     dst="$DST_DIR/$name"
     tmp="$STAGE_DIR/${name}.part.$$"
+    ((TOTAL_ITEMS+=1))
 
     if [[ -e "$dst" && "$OVERWRITE" -eq 0 ]]; then
         warn "目标已存在，跳过目录: $name/"
+        ((SKIPPED_ITEMS+=1))
+        return 0
+    fi
+
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+        log "[DRY-RUN] 将复制目录: $src -> $dst"
+        ((DRYRUN_ITEMS+=1))
         return 0
     fi
 
@@ -214,14 +279,17 @@ copy_dir() {
         0)
             retry rm -rf -- "$src"
             log "完成目录: $name/"
+            ((COPIED_DIRS+=1))
             ;;
         2)
             rm -rf -- "$tmp" 2>/dev/null || true
             warn "发布跳过，保留源目录: $name/"
+            ((SKIPPED_ITEMS+=1))
             ;;
         *)
             err "发布目录失败: $name/"
             rm -rf -- "$tmp" 2>/dev/null || true
+            ((FAILED_ITEMS+=1))
             return 1
             ;;
     esac
@@ -235,6 +303,7 @@ process_one() {
         copy_dir "$item"
     else
         warn "跳过不支持的类型: $item"
+        ((SKIPPED_ITEMS+=1))
     fi
 }
 
@@ -249,13 +318,23 @@ require_cmd flock
 require_cmd stat
 require_cmd find
 
+if [[ -n "$TG_BOT_TOKEN" || -n "$TG_CHAT_ID" ]]; then
+    require_cmd curl
+fi
+
 if [[ "$CHECK_MOUNTPOINT" -eq 1 ]]; then
     require_cmd mountpoint
 fi
 
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    SHOULD_SUMMARIZE=0
     usage
     exit 0
+fi
+
+if [[ "${1:-}" == "--dry-run" ]]; then
+    DRY_RUN=1
+    RUN_MODE="dry-run"
 fi
 
 log "========== 开始处理 =========="
@@ -275,6 +354,7 @@ if [[ "$CHECK_MOUNTPOINT" -eq 1 ]] && ! mountpoint -q "$SRC_DIR"; then
 fi
 
 if [[ "${1:-}" == "--self-check" ]]; then
+    SHOULD_SUMMARIZE=0
     log "自检通过"
     exit 0
 fi

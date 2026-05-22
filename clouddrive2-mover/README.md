@@ -35,6 +35,7 @@ curl -fsSL https://raw.githubusercontent.com/great99mm/myscripts/main/install-cl
 - 检查 `SRC_DIR` 是否存在
 - 自动安装缺少的基础依赖（`curl`、`tar`、`sudo`）
 - 安装完成后自动跑一次 service 自检
+- 安装时交互输入源目录、目标目录和 Telegram 配置
 
 自定义目录：
 
@@ -81,6 +82,25 @@ systemctl list-timers | grep clouddrive2-mover
 systemctl start clouddrive2-mover.service
 journalctl -u clouddrive2-mover.service -f
 ```
+
+## Dry Run
+
+安装时会询问是否先启用 dry-run。
+
+手动临时执行 dry-run：
+
+```bash
+sudo DRY_RUN=1 /usr/local/bin/clouddrive2-mover.sh --dry-run
+```
+
+## Telegram 通知
+
+安装时会提示输入：
+
+- `TG_BOT_TOKEN`
+- `TG_CHAT_ID`
+
+配置后每次任务结束会发送摘要通知。
 
 ## 配置文件
 
