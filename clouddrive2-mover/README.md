@@ -17,6 +17,7 @@
 - `clouddrive2-mover.timer`：systemd timer
 - `clouddrive2-mover.env.example`：配置示例
 - `install.sh`：一键安装脚本
+- `uninstall.sh`：卸载脚本
 
 ## 一键安装
 
@@ -33,6 +34,7 @@ curl -fsSL https://raw.githubusercontent.com/great99mm/myscripts/main/install-cl
 - 检查当前系统是否使用 `systemd`
 - 检查 `SRC_DIR` 是否存在
 - 自动安装缺少的基础依赖（`curl`、`tar`、`sudo`）
+- 安装完成后自动跑一次 service 自检
 
 自定义目录：
 
@@ -93,6 +95,18 @@ journalctl -u clouddrive2-mover.service -f
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl restart clouddrive2-mover.timer
+```
+
+## 卸载
+
+```bash
+sudo bash /usr/local/bin/clouddrive2-mover-uninstall.sh
+```
+
+如果连日志目录和 staging 目录也要一起删：
+
+```bash
+sudo REMOVE_LOG_DIR=1 REMOVE_STAGE_DIR=1 bash /usr/local/bin/clouddrive2-mover-uninstall.sh
 ```
 
 ## 建议

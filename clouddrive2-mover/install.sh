@@ -5,6 +5,8 @@ PREFIX="/usr/local/bin"
 SYSTEMD_DIR="/etc/systemd/system"
 ENV_DIR="/etc/default"
 APP_NAME="clouddrive2-mover"
+SERVICE_NAME="clouddrive2-mover.service"
+TIMER_NAME="clouddrive2-mover.timer"
 
 log() {
     printf '[%s] %s\n' "$(date '+%F %T')" "$*"
@@ -95,6 +97,34 @@ check_src_dir() {
     fi
 }
 
+self_check() {
+    log "开始安装后自检"
+
+    if ! systemctl list-unit-files "$SERVICE_NAME" >/dev/null 2>&1; then
+        err "service 未正确安装: $SERVICE_NAME"
+        exit 1
+    fi
+
+    if ! systemctl list-unit-files "$TIMER_NAME" >/dev/null 2>&1; then
+        err "timer 未正确安装: $TIMER_NAME"
+        exit 1
+    fi
+
+    if [[ "$ENABLE_NOW" == "1" ]]; then
+        if ! systemctl is-enabled "$TIMER_NAME" >/dev/null 2>&1; then
+            err "timer 未启用: $TIMER_NAME"
+            exit 1
+        fi
+    fi
+
+    if ! bash "$PREFIX/clouddrive2-mover.sh" --self-check; then
+        err "主脚本自检失败"
+        exit 1
+    fi
+
+    log "自检完成"
+}
+
 usage() {
     cat <<'EOF'
 用法:
@@ -152,6 +182,7 @@ log "目标目录: $DST_DIR"
 
 install -d -m 755 "$PREFIX" "$SYSTEMD_DIR" "$ENV_DIR" "$LOG_DIR" "$STAGE_DIR" "$DST_DIR"
 install -m 755 "$SCRIPT_DIR/clouddrive2-mover.sh" "$PREFIX/clouddrive2-mover.sh"
+install -m 755 "$SCRIPT_DIR/uninstall.sh" "$PREFIX/clouddrive2-mover-uninstall.sh"
 install -m 644 "$SCRIPT_DIR/clouddrive2-mover.service" "$SYSTEMD_DIR/clouddrive2-mover.service"
 install -m 644 "$SCRIPT_DIR/clouddrive2-mover.timer" "$SYSTEMD_DIR/clouddrive2-mover.timer"
 
@@ -176,6 +207,8 @@ if [[ "$ENABLE_NOW" == "1" ]]; then
     systemctl enable --now clouddrive2-mover.timer
 fi
 
+self_check
+
 cat <<EOF
 安装完成。
 
@@ -184,6 +217,7 @@ cat <<EOF
 
 脚本路径:
   $PREFIX/clouddrive2-mover.sh
+  $PREFIX/clouddrive2-mover-uninstall.sh
 
 常用命令:
   systemctl status clouddrive2-mover.timer
@@ -193,4 +227,7 @@ cat <<EOF
 如需修改配置:
   编辑 $ENV_DIR/clouddrive2-mover
   然后执行 systemctl restart clouddrive2-mover.timer
+
+卸载:
+  sudo bash $PREFIX/clouddrive2-mover-uninstall.sh
 EOF

@@ -19,6 +19,7 @@ curl -fsSL https://raw.githubusercontent.com/great99mm/myscripts/main/install-cl
 - 检查是否为 systemd 系统
 - 检查 CloudDrive2 挂载源目录是否存在
 - 自动安装缺少的基础依赖（如 `curl` / `tar` / `sudo`）
+- 安装完成后自动跑一次自检
 
 项目说明见：
 

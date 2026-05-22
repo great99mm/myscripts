@@ -16,6 +16,15 @@ OVERWRITE="${OVERWRITE:-0}"
 CLEAN_EMPTY_DIRS="${CLEAN_EMPTY_DIRS:-1}"
 CHECK_MOUNTPOINT="${CHECK_MOUNTPOINT:-1}"
 
+usage() {
+    cat <<'EOF'
+用法:
+  clouddrive2-mover.sh
+  clouddrive2-mover.sh --self-check
+  clouddrive2-mover.sh -h | --help
+EOF
+}
+
 mkdir -p "$DST_DIR" "$STAGE_DIR" "$LOG_DIR"
 LOG_FILE="$LOG_DIR/move_$(date +%Y%m%d_%H%M%S).log"
 
@@ -244,6 +253,11 @@ if [[ "$CHECK_MOUNTPOINT" -eq 1 ]]; then
     require_cmd mountpoint
 fi
 
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    usage
+    exit 0
+fi
+
 log "========== 开始处理 =========="
 log "源目录: $SRC_DIR"
 log "目标目录: $DST_DIR"
@@ -258,6 +272,11 @@ fi
 if [[ "$CHECK_MOUNTPOINT" -eq 1 ]] && ! mountpoint -q "$SRC_DIR"; then
     err "源目录不是挂载点或尚未挂载: $SRC_DIR"
     exit 1
+fi
+
+if [[ "${1:-}" == "--self-check" ]]; then
+    log "自检通过"
+    exit 0
 fi
 
 failed=0
