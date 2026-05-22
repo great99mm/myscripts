@@ -1,0 +1,279 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+shopt -s nullglob dotglob
+
+SRC_DIR="${SRC_DIR:-/opt/media/CloudDrive}"
+DST_DIR="${DST_DIR:-/opt/media/115完成}"
+STAGE_DIR="${STAGE_DIR:-$DST_DIR/.staging}"
+LOG_DIR="${LOG_DIR:-/var/log/clouddrive2-mover}"
+LOCK_FILE="${LOCK_FILE:-/run/clouddrive2-mover.lock}"
+
+RETRY_TIMES="${RETRY_TIMES:-3}"
+RETRY_DELAY="${RETRY_DELAY:-10}"
+STABLE_CHECKS="${STABLE_CHECKS:-2}"
+STABLE_INTERVAL="${STABLE_INTERVAL:-5}"
+OVERWRITE="${OVERWRITE:-0}"
+CLEAN_EMPTY_DIRS="${CLEAN_EMPTY_DIRS:-1}"
+CHECK_MOUNTPOINT="${CHECK_MOUNTPOINT:-1}"
+
+mkdir -p "$DST_DIR" "$STAGE_DIR" "$LOG_DIR"
+LOG_FILE="$LOG_DIR/move_$(date +%Y%m%d_%H%M%S).log"
+
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+    echo "已有实例在运行，退出。"
+    exit 1
+fi
+
+log() {
+    printf '[%s] %s\n' "$(date '+%F %T')" "$*" | tee -a "$LOG_FILE"
+}
+
+warn() {
+    log "WARN: $*"
+}
+
+err() {
+    log "ERROR: $*"
+}
+
+require_cmd() {
+    command -v "$1" >/dev/null 2>&1 || {
+        err "缺少命令: $1"
+        exit 1
+    }
+}
+
+on_exit() {
+    local code=$?
+    if [[ $code -ne 0 ]]; then
+        err "脚本异常退出，退出码: $code"
+    else
+        log "脚本正常结束"
+    fi
+}
+trap on_exit EXIT
+
+retry() {
+    local n=1
+    while true; do
+        if "$@"; then
+            return 0
+        fi
+        if (( n >= RETRY_TIMES )); then
+            return 1
+        fi
+        warn "命令失败，第 ${n}/${RETRY_TIMES} 次，${RETRY_DELAY}s 后重试: $*"
+        sleep "$RETRY_DELAY"
+        ((n++))
+    done
+}
+
+get_size() {
+    stat -c '%s' "$1"
+}
+
+wait_file_stable() {
+    local file="$1"
+    local i last current
+
+    [[ -f "$file" || -L "$file" ]] || return 0
+
+    last="$(get_size "$file" 2>/dev/null || echo -1)"
+    for ((i=1; i<=STABLE_CHECKS; i++)); do
+        sleep "$STABLE_INTERVAL"
+        current="$(get_size "$file" 2>/dev/null || echo -1)"
+        if [[ "$current" != "$last" ]]; then
+            warn "文件仍在变化，跳过本轮: $file"
+            return 1
+        fi
+        last="$current"
+    done
+    return 0
+}
+
+publish_path() {
+    local tmp="$1"
+    local dst="$2"
+    local backup=""
+
+    mkdir -p "$(dirname "$dst")"
+
+    if [[ -e "$dst" ]]; then
+        if [[ "$OVERWRITE" -eq 0 ]]; then
+            warn "目标已存在，跳过发布: $dst"
+            return 2
+        fi
+        backup="${dst}.bak.$$"
+        mv -- "$dst" "$backup"
+    fi
+
+    if mv -- "$tmp" "$dst"; then
+        [[ -n "$backup" && -e "$backup" ]] && rm -rf -- "$backup"
+        return 0
+    fi
+
+    if [[ -n "$backup" && -e "$backup" && ! -e "$dst" ]]; then
+        mv -- "$backup" "$dst" || true
+    fi
+    return 1
+}
+
+copy_file() {
+    local src="$1"
+    local name dst tmp src_size_before src_size_after tmp_size rc
+
+    name="$(basename -- "$src")"
+    dst="$DST_DIR/$name"
+    tmp="$STAGE_DIR/${name}.part.$$"
+
+    if [[ -e "$dst" && "$OVERWRITE" -eq 0 ]]; then
+        warn "目标已存在，跳过文件: $name"
+        return 0
+    fi
+
+    wait_file_stable "$src" || return 0
+
+    src_size_before="$(get_size "$src" 2>/dev/null || echo -1)"
+    log "开始复制文件: $name"
+    rm -f -- "$tmp"
+    retry rsync -a --partial --append-verify -- "$src" "$tmp"
+
+    src_size_after="$(get_size "$src" 2>/dev/null || echo -1)"
+    tmp_size="$(get_size "$tmp" 2>/dev/null || echo -2)"
+
+    if [[ "$src_size_before" != "$src_size_after" ]]; then
+        warn "源文件大小发生变化，跳过删除源文件: $name"
+        rm -f -- "$tmp"
+        return 1
+    fi
+
+    if [[ "$src_size_after" != "$tmp_size" ]]; then
+        err "大小校验失败: $name (src=$src_size_after, tmp=$tmp_size)"
+        rm -f -- "$tmp"
+        return 1
+    fi
+
+    set +e
+    publish_path "$tmp" "$dst"
+    rc=$?
+    set -e
+
+    case "$rc" in
+        0)
+            retry rm -f -- "$src"
+            log "完成文件: $name"
+            ;;
+        2)
+            rm -f -- "$tmp" 2>/dev/null || true
+            warn "发布跳过，保留源文件: $name"
+            ;;
+        *)
+            err "发布失败: $name"
+            rm -f -- "$tmp" 2>/dev/null || true
+            return 1
+            ;;
+    esac
+}
+
+copy_dir() {
+    local src="$1"
+    local name dst tmp rc
+
+    name="$(basename -- "$src")"
+    dst="$DST_DIR/$name"
+    tmp="$STAGE_DIR/${name}.part.$$"
+
+    if [[ -e "$dst" && "$OVERWRITE" -eq 0 ]]; then
+        warn "目标已存在，跳过目录: $name/"
+        return 0
+    fi
+
+    log "开始复制目录: $name/"
+    rm -rf -- "$tmp"
+    mkdir -p -- "$tmp"
+
+    retry rsync -a --delete --partial -- "$src"/ "$tmp"/
+    retry rsync -a --delete --partial -- "$src"/ "$tmp"/
+
+    set +e
+    publish_path "$tmp" "$dst"
+    rc=$?
+    set -e
+
+    case "$rc" in
+        0)
+            retry rm -rf -- "$src"
+            log "完成目录: $name/"
+            ;;
+        2)
+            rm -rf -- "$tmp" 2>/dev/null || true
+            warn "发布跳过，保留源目录: $name/"
+            ;;
+        *)
+            err "发布目录失败: $name/"
+            rm -rf -- "$tmp" 2>/dev/null || true
+            return 1
+            ;;
+    esac
+}
+
+process_one() {
+    local item="$1"
+    if [[ -L "$item" || -f "$item" ]]; then
+        copy_file "$item"
+    elif [[ -d "$item" ]]; then
+        copy_dir "$item"
+    else
+        warn "跳过不支持的类型: $item"
+    fi
+}
+
+cleanup_empty_dirs() {
+    [[ "$CLEAN_EMPTY_DIRS" -eq 1 ]] || return 0
+    log "清理源目录空目录"
+    find "$SRC_DIR" -depth -type d -empty -delete 2>/dev/null || true
+}
+
+require_cmd rsync
+require_cmd flock
+require_cmd stat
+require_cmd find
+
+if [[ "$CHECK_MOUNTPOINT" -eq 1 ]]; then
+    require_cmd mountpoint
+fi
+
+log "========== 开始处理 =========="
+log "源目录: $SRC_DIR"
+log "目标目录: $DST_DIR"
+log "临时目录: $STAGE_DIR"
+log "日志文件: $LOG_FILE"
+
+if [[ ! -d "$SRC_DIR" ]]; then
+    err "源目录不存在: $SRC_DIR"
+    exit 1
+fi
+
+if [[ "$CHECK_MOUNTPOINT" -eq 1 ]] && ! mountpoint -q "$SRC_DIR"; then
+    err "源目录不是挂载点或尚未挂载: $SRC_DIR"
+    exit 1
+fi
+
+failed=0
+for item in "$SRC_DIR"/* "$SRC_DIR"/.[!.]* "$SRC_DIR"/..?*; do
+    [[ -e "$item" ]] || continue
+    if ! process_one "$item"; then
+        failed=1
+        warn "处理失败，继续下一个: $item"
+    fi
+done
+
+cleanup_empty_dirs
+
+if [[ "$failed" -eq 0 ]]; then
+    log "========== 全部完成 =========="
+else
+    warn "========== 部分完成，有失败项目 =========="
+    exit 2
+fi

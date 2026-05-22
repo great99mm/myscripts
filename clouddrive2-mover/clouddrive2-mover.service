@@ -1,0 +1,22 @@
+[Unit]
+Description=Move files from CloudDrive2 mount to local storage
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+EnvironmentFile=-/etc/default/clouddrive2-mover
+ExecStart=/usr/local/bin/clouddrive2-mover.sh
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+TimeoutStartSec=7d
+StandardOutput=journal
+StandardError=journal
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
