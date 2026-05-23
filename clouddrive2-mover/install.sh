@@ -271,6 +271,7 @@ log "目标目录: $DST_DIR"
 install -d -m 755 "$PREFIX" "$SYSTEMD_DIR" "$ENV_DIR" "$LOG_DIR" "$STAGE_DIR" "$DST_DIR"
 install -m 755 "$SCRIPT_DIR/clouddrive2-mover.sh" "$PREFIX/clouddrive2-mover.sh"
 install -m 755 "$SCRIPT_DIR/uninstall.sh" "$PREFIX/clouddrive2-mover-uninstall.sh"
+install -m 755 "$SCRIPT_DIR/upgrade.sh" "$PREFIX/clouddrive2-mover-upgrade.sh"
 install -m 644 "$SCRIPT_DIR/clouddrive2-mover.service" "$SYSTEMD_DIR/clouddrive2-mover.service"
 install -m 644 "$SCRIPT_DIR/clouddrive2-mover.timer" "$SYSTEMD_DIR/clouddrive2-mover.timer"
 
@@ -315,6 +316,7 @@ cat <<EOF
 脚本路径:
   $PREFIX/clouddrive2-mover.sh
   $PREFIX/clouddrive2-mover-uninstall.sh
+  $PREFIX/clouddrive2-mover-upgrade.sh
 
 常用命令:
   systemctl status clouddrive2-mover.timer
@@ -327,4 +329,7 @@ cat <<EOF
 
 卸载:
   sudo bash $PREFIX/clouddrive2-mover-uninstall.sh
+
+升级:
+  curl -fsSL https://raw.githubusercontent.com/great99mm/myscripts/main/upgrade-clouddrive2-mover.sh | bash
 EOF

@@ -17,6 +17,7 @@
 - `clouddrive2-mover.timer`：systemd timer
 - `clouddrive2-mover.env.example`：配置示例
 - `install.sh`：一键安装脚本
+- `upgrade.sh`：一键升级脚本
 - `uninstall.sh`：卸载脚本
 
 ## 一键安装
@@ -68,6 +69,20 @@ sudo SRC_DIR=/opt/media/CloudDrive \
      DST_DIR=/opt/media/115完成 \
      STAGE_DIR=/opt/media/115mvtmp/.staging \
      bash install.sh
+```
+
+## 一键升级
+
+升级会保留 `/etc/default/clouddrive2-mover` 里的现有配置，只更新脚本和 systemd 文件。
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/great99mm/myscripts/main/upgrade-clouddrive2-mover.sh | bash
+```
+
+安装后本地也有升级脚本：
+
+```bash
+sudo bash /usr/local/bin/clouddrive2-mover-upgrade.sh
 ```
 
 ## 默认定时

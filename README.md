@@ -14,6 +14,12 @@
 curl -fsSL https://raw.githubusercontent.com/great99mm/myscripts/main/install-clouddrive2-mover.sh | bash
 ```
 
+一键升级：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/great99mm/myscripts/main/upgrade-clouddrive2-mover.sh | bash
+```
+
 安装器会自动：
 
 - 检查是否为 systemd 系统
