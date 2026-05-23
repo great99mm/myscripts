@@ -97,6 +97,13 @@ check_src_dir() {
     fi
 }
 
+validate_config() {
+    if ! [[ "$CONCURRENCY" =~ ^[0-9]+$ ]] || (( CONCURRENCY < 1 )); then
+        err "并发数必须是大于等于 1 的整数，当前: $CONCURRENCY"
+        exit 1
+    fi
+}
+
 self_check() {
     log "开始安装后自检"
 
@@ -181,6 +188,7 @@ CLEAN_EMPTY_DIRS="${CLEAN_EMPTY_DIRS:-1}"
 CHECK_MOUNTPOINT="${CHECK_MOUNTPOINT:-1}"
 ENABLE_NOW="${ENABLE_NOW:-1}"
 DRY_RUN="${DRY_RUN:-0}"
+CONCURRENCY="${CONCURRENCY:-2}"
 TG_BOT_TOKEN="${TG_BOT_TOKEN:-}"
 TG_CHAT_ID="${TG_CHAT_ID:-}"
 
@@ -190,10 +198,6 @@ prompt_input() {
     local default_value="$3"
     local secret="${4:-0}"
     local input=""
-
-    if [[ -n "${!var_name:-}" ]]; then
-        return 0
-    fi
 
     if [[ ! -r /dev/tty ]]; then
         printf -v "$var_name" '%s' "$default_value"
@@ -219,10 +223,6 @@ prompt_yes_no() {
     local default_value="$3"
     local input=""
 
-    if [[ -n "${!var_name:-}" ]]; then
-        return 0
-    fi
-
     if [[ ! -r /dev/tty ]]; then
         printf -v "$var_name" '%s' "$default_value"
         return 0
@@ -242,6 +242,7 @@ interactive_config() {
     prompt_input DST_DIR "请输入本地目标目录" "$DST_DIR"
     prompt_input STAGE_DIR "请输入 staging 临时目录" "$STAGE_DIR"
     prompt_input LOG_DIR "请输入日志目录" "$LOG_DIR"
+    prompt_input CONCURRENCY "请输入并发数" "$CONCURRENCY"
     prompt_yes_no CHECK_MOUNTPOINT "是否开启挂载点检查？(y/n)" "$CHECK_MOUNTPOINT"
     prompt_yes_no DRY_RUN "首次运行是否启用 dry-run？(y/n)" "$DRY_RUN"
     prompt_input TG_BOT_TOKEN "请输入 Telegram Bot Token，可留空" "$TG_BOT_TOKEN" 1
@@ -261,6 +262,7 @@ if [[ "$CHECK_MOUNTPOINT" == "1" ]]; then
 fi
 require_systemd
 check_src_dir
+validate_config
 
 log "安装 ${APP_NAME}"
 log "源目录: $SRC_DIR"
@@ -287,6 +289,7 @@ write_env() {
         printf 'CLEAN_EMPTY_DIRS=%q\n' "$CLEAN_EMPTY_DIRS"
         printf 'CHECK_MOUNTPOINT=%q\n' "$CHECK_MOUNTPOINT"
         printf 'DRY_RUN=%q\n' "$DRY_RUN"
+        printf 'CONCURRENCY=%q\n' "$CONCURRENCY"
         printf 'TG_BOT_TOKEN=%q\n' "$TG_BOT_TOKEN"
         printf 'TG_CHAT_ID=%q\n' "$TG_CHAT_ID"
     } > "$ENV_DIR/clouddrive2-mover"

@@ -16,6 +16,7 @@ OVERWRITE="${OVERWRITE:-0}"
 CLEAN_EMPTY_DIRS="${CLEAN_EMPTY_DIRS:-1}"
 CHECK_MOUNTPOINT="${CHECK_MOUNTPOINT:-1}"
 DRY_RUN="${DRY_RUN:-0}"
+CONCURRENCY="${CONCURRENCY:-2}"
 TG_BOT_TOKEN="${TG_BOT_TOKEN:-}"
 TG_CHAT_ID="${TG_CHAT_ID:-}"
 
@@ -41,6 +42,7 @@ EOF
 
 mkdir -p "$DST_DIR" "$STAGE_DIR" "$LOG_DIR"
 LOG_FILE="$LOG_DIR/move_$(date +%Y%m%d_%H%M%S).log"
+STATS_FILE="$(mktemp "$LOG_DIR/stats.XXXXXX")"
 
 exec 9>"$LOCK_FILE"
 if ! flock -n 9; then
@@ -60,6 +62,33 @@ err() {
     log "ERROR: $*"
 }
 
+record_stat() {
+    printf '%s\n' "$1" >> "$STATS_FILE"
+}
+
+aggregate_stats() {
+    [[ -f "$STATS_FILE" ]] || return 0
+
+    TOTAL_ITEMS=0
+    COPIED_FILES=0
+    COPIED_DIRS=0
+    SKIPPED_ITEMS=0
+    FAILED_ITEMS=0
+    DRYRUN_ITEMS=0
+
+    local stat
+    while IFS= read -r stat; do
+        case "$stat" in
+            total) ((TOTAL_ITEMS+=1)) ;;
+            copied_file) ((COPIED_FILES+=1)) ;;
+            copied_dir) ((COPIED_DIRS+=1)) ;;
+            skipped) ((SKIPPED_ITEMS+=1)) ;;
+            failed) ((FAILED_ITEMS+=1)) ;;
+            dryrun) ((DRYRUN_ITEMS+=1)) ;;
+        esac
+    done < "$STATS_FILE"
+}
+
 send_telegram() {
     [[ -n "$TG_BOT_TOKEN" && -n "$TG_CHAT_ID" ]] || return 0
 
@@ -72,6 +101,7 @@ send_telegram() {
 
 print_summary() {
     local status_text="$1"
+    aggregate_stats
     log "摘要: mode=${RUN_MODE}, total=${TOTAL_ITEMS}, files=${COPIED_FILES}, dirs=${COPIED_DIRS}, skipped=${SKIPPED_ITEMS}, failed=${FAILED_ITEMS}, dryrun=${DRYRUN_ITEMS}"
 
     if [[ "$SUMMARY_SENT" -eq 0 ]]; then
@@ -110,6 +140,7 @@ on_exit() {
             print_summary "完成"
         fi
     fi
+    rm -f "$STATS_FILE" 2>/dev/null || true
 }
 trap on_exit EXIT
 
@@ -186,18 +217,25 @@ copy_file() {
     dst="$DST_DIR/$name"
     tmp="$STAGE_DIR/${name}.part.$$"
     ((TOTAL_ITEMS+=1))
+    record_stat total
 
     if [[ -e "$dst" && "$OVERWRITE" -eq 0 ]]; then
         warn "目标已存在，跳过文件: $name"
         ((SKIPPED_ITEMS+=1))
+        record_stat skipped
         return 0
     fi
 
-    wait_file_stable "$src" || return 0
+    if ! wait_file_stable "$src"; then
+        ((SKIPPED_ITEMS+=1))
+        record_stat skipped
+        return 0
+    fi
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
         log "[DRY-RUN] 将复制文件: $src -> $dst"
         ((DRYRUN_ITEMS+=1))
+        record_stat dryrun
         return 0
     fi
 
@@ -231,16 +269,19 @@ copy_file() {
             retry rm -f -- "$src"
             log "完成文件: $name"
             ((COPIED_FILES+=1))
+            record_stat copied_file
             ;;
         2)
             rm -f -- "$tmp" 2>/dev/null || true
             warn "发布跳过，保留源文件: $name"
             ((SKIPPED_ITEMS+=1))
+            record_stat skipped
             ;;
         *)
             err "发布失败: $name"
             rm -f -- "$tmp" 2>/dev/null || true
             ((FAILED_ITEMS+=1))
+            record_stat failed
             return 1
             ;;
     esac
@@ -254,16 +295,19 @@ copy_dir() {
     dst="$DST_DIR/$name"
     tmp="$STAGE_DIR/${name}.part.$$"
     ((TOTAL_ITEMS+=1))
+    record_stat total
 
     if [[ -e "$dst" && "$OVERWRITE" -eq 0 ]]; then
         warn "目标已存在，跳过目录: $name/"
         ((SKIPPED_ITEMS+=1))
+        record_stat skipped
         return 0
     fi
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
         log "[DRY-RUN] 将复制目录: $src -> $dst"
         ((DRYRUN_ITEMS+=1))
+        record_stat dryrun
         return 0
     fi
 
@@ -284,16 +328,19 @@ copy_dir() {
             retry rm -rf -- "$src"
             log "完成目录: $name/"
             ((COPIED_DIRS+=1))
+            record_stat copied_dir
             ;;
         2)
             rm -rf -- "$tmp" 2>/dev/null || true
             warn "发布跳过，保留源目录: $name/"
             ((SKIPPED_ITEMS+=1))
+            record_stat skipped
             ;;
         *)
             err "发布目录失败: $name/"
             rm -rf -- "$tmp" 2>/dev/null || true
             ((FAILED_ITEMS+=1))
+            record_stat failed
             return 1
             ;;
     esac
@@ -308,7 +355,59 @@ process_one() {
     else
         warn "跳过不支持的类型: $item"
         ((SKIPPED_ITEMS+=1))
+        record_stat skipped
     fi
+}
+
+process_one_job() {
+    trap - EXIT
+    process_one "$1"
+}
+
+process_all_items() {
+    local failed_ref=0
+    local active_jobs=0
+    local item
+
+    if ! [[ "$CONCURRENCY" =~ ^[0-9]+$ ]] || (( CONCURRENCY < 1 )); then
+        err "CONCURRENCY 必须是大于等于 1 的整数，当前: $CONCURRENCY"
+        return 1
+    fi
+
+    log "并发数: $CONCURRENCY"
+
+    if (( CONCURRENCY == 1 )); then
+        for item in "$SRC_DIR"/*; do
+            [[ -e "$item" ]] || continue
+            if ! process_one "$item"; then
+                failed_ref=1
+                warn "处理失败，继续下一个: $item"
+            fi
+        done
+        return "$failed_ref"
+    fi
+
+    for item in "$SRC_DIR"/*; do
+        [[ -e "$item" ]] || continue
+        process_one_job "$item" &
+        active_jobs=$((active_jobs + 1))
+
+        if (( active_jobs >= CONCURRENCY )); then
+            if ! wait -n; then
+                failed_ref=1
+            fi
+            active_jobs=$((active_jobs - 1))
+        fi
+    done
+
+    while (( active_jobs > 0 )); do
+        if ! wait -n; then
+            failed_ref=1
+        fi
+        active_jobs=$((active_jobs - 1))
+    done
+
+    return "$failed_ref"
 }
 
 cleanup_empty_dirs() {
@@ -364,13 +463,9 @@ if [[ "${1:-}" == "--self-check" ]]; then
 fi
 
 failed=0
-for item in "$SRC_DIR"/* "$SRC_DIR"/.[!.]* "$SRC_DIR"/..?*; do
-    [[ -e "$item" ]] || continue
-    if ! process_one "$item"; then
-        failed=1
-        warn "处理失败，继续下一个: $item"
-    fi
-done
+if ! process_all_items; then
+    failed=1
+fi
 
 cleanup_empty_dirs
 

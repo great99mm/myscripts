@@ -36,6 +36,7 @@ curl -fsSL https://raw.githubusercontent.com/great99mm/myscripts/main/install-cl
 - 自动安装缺少的基础依赖（`curl`、`tar`、`sudo`）
 - 安装完成后自动跑一次 service 自检
 - 安装时交互输入源目录、目标目录和 Telegram 配置
+- 默认并发数为 `2`
 
 自定义目录：
 
@@ -102,6 +103,19 @@ sudo DRY_RUN=1 /usr/local/bin/clouddrive2-mover.sh --dry-run
 
 配置后每次任务结束会发送摘要通知。
 安装完成后，如果这两个值都不为空，会立即发送一条 Telegram 测试消息。
+
+## 并发数
+
+默认并发数是 2，相当于同时处理两个顶层项目。
+
+安装后可以改：
+
+```bash
+sudo sed -i 's/^CONCURRENCY=.*/CONCURRENCY=2/' /etc/default/clouddrive2-mover
+sudo systemctl restart clouddrive2-mover.timer
+```
+
+如果 CloudDrive2 或网盘 API 容易限速，我不建议超过 2。
 
 ## 配置文件
 
