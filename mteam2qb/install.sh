@@ -22,14 +22,14 @@ echo ""
 echo -e "${YELLOW}请填写配置信息：${NC}"
 echo ""
 
-read -p "M-Team API Key: " MTEAM_API_KEY < /dev/tty
-read -p "qBittorrent 地址 (默认 http://localhost:8080): " QB_URL < /dev/tty
+read -p "M-Team API Key: " MTEAM_API_KEY
+read -p "qBittorrent 地址 (默认 http://localhost:8080): " QB_URL
 QB_URL=${QB_URL:-"http://localhost:8080"}
-read -p "qBittorrent 用户名 (默认 admin): " QB_USER < /dev/tty
+read -p "qBittorrent 用户名 (默认 admin): " QB_USER
 QB_USER=${QB_USER:-"admin"}
-read -sp "qBittorrent 密码: " QB_PASS < /dev/tty
-echo "" < /dev/tty
-read -p "请求间隔秒数 (默认 3): " MTEAM_INTERVAL < /dev/tty
+read -sp "qBittorrent 密码: " QB_PASS
+echo ""
+read -p "请求间隔秒数 (默认 3): " MTEAM_INTERVAL
 MTEAM_INTERVAL=${MTEAM_INTERVAL:-"3"}
 
 # 保存配置
