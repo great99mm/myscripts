@@ -1,0 +1,11 @@
+[Unit]
+Description=Run CloudDrive2 mover periodically
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=30min
+Persistent=true
+Unit=clouddrive2-mover.service
+
+[Install]
+WantedBy=timers.target
