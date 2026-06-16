@@ -49,24 +49,21 @@ echo -e "${GREEN}配置已保存到: $CONFIG_FILE${NC}"
 
 # 下载脚本
 echo -e "${GREEN}下载脚本...${NC}"
-curl -fsSL "$SCRIPT_URL" -o "$SCRIPT_PATH"
+curl -fsSL "$SCRIPT_URL" -o "$INSTALL_DIR/mteam_to_qb.py"
+chmod +x "$INSTALL_DIR/mteam_to_qb.py"
 
 # 创建包装脚本，自动加载配置
-cat > "${SCRIPT_PATH}.sh" << 'WRAPPER'
+cat > "$SCRIPT_PATH" << EOF
 #!/bin/bash
-CONFIG_FILE="$HOME/.mteam2qb.conf"
-if [ -f "$CONFIG_FILE" ]; then
-    source "$CONFIG_FILE"
+CONFIG_FILE="\$HOME/.mteam2qb.conf"
+if [ -f "\$CONFIG_FILE" ]; then
+    source "\$CONFIG_FILE"
     export MTEAM_API_KEY QB_URL QB_USER QB_PASS MTEAM_INTERVAL
 fi
-python3 "${0%.sh}" "$@"
-WRAPPER
+python3 "$INSTALL_DIR/mteam_to_qb.py" "\$@"
+EOF
 
 chmod +x "$SCRIPT_PATH"
-chmod +x "${SCRIPT_PATH}.sh"
-
-# 创建符号链接
-ln -sf "${SCRIPT_PATH}.sh" "$INSTALL_DIR/mteam2qb"
 
 echo -e "${GREEN}安装完成！${NC}"
 echo ""
