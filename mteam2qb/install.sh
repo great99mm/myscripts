@@ -6,7 +6,6 @@
 INSTALL_DIR="/usr/local/bin"
 SCRIPT_URL="https://raw.githubusercontent.com/great99mm/myscripts/main/mteam2qb/mteam_to_qb.py"
 CONFIG_FILE="$HOME/.mteam2qb.conf"
-SCRIPT_PATH="$INSTALL_DIR/mteam2qb"
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -34,7 +33,6 @@ MTEAM_INTERVAL=${MTEAM_INTERVAL:-"3"}
 
 # 保存配置
 cat > "$CONFIG_FILE" << EOF
-# mteam2qb 配置文件
 MTEAM_API_KEY="$MTEAM_API_KEY"
 QB_URL="$QB_URL"
 QB_USER="$QB_USER"
@@ -47,23 +45,23 @@ chmod 600 "$CONFIG_FILE"
 echo ""
 echo -e "${GREEN}配置已保存到: $CONFIG_FILE${NC}"
 
-# 下载脚本
+# 下载 Python 脚本
 echo -e "${GREEN}下载脚本...${NC}"
 curl -fsSL "$SCRIPT_URL" -o "$INSTALL_DIR/mteam_to_qb.py"
 chmod +x "$INSTALL_DIR/mteam_to_qb.py"
 
-# 创建包装脚本，自动加载配置
-cat > "$SCRIPT_PATH" << EOF
+# 创建 bash 包装脚本
+cat > "$INSTALL_DIR/mteam2qb" << 'ENDSCRIPT'
 #!/bin/bash
-CONFIG_FILE="\$HOME/.mteam2qb.conf"
-if [ -f "\$CONFIG_FILE" ]; then
-    source "\$CONFIG_FILE"
+CONFIG_FILE="$HOME/.mteam2qb.conf"
+if [ -f "$CONFIG_FILE" ]; then
+    source "$CONFIG_FILE"
     export MTEAM_API_KEY QB_URL QB_USER QB_PASS MTEAM_INTERVAL
 fi
-python3 "$INSTALL_DIR/mteam_to_qb.py" "\$@"
-EOF
+python3 /usr/local/bin/mteam_to_qb.py "$@"
+ENDSCRIPT
 
-chmod +x "$SCRIPT_PATH"
+chmod +x "$INSTALL_DIR/mteam2qb"
 
 echo -e "${GREEN}安装完成！${NC}"
 echo ""
